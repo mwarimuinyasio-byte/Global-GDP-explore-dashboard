@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from pathlib import Path
 
 
 # =========================================================
@@ -26,16 +27,62 @@ st.write(
 
 
 # =========================================================
+# FIND GDP.CSV
+# =========================================================
+
+# Get the folder where app.py is located
+BASE_DIR = Path(__file__).resolve().parent
+
+# Look for GDP.csv in the same folder as app.py
+DATA_FILE = BASE_DIR / "GDP.csv"
+
+
+# =========================================================
+# CHECK IF FILE EXISTS
+# =========================================================
+
+if not DATA_FILE.exists():
+
+    st.error("GDP.csv could not be found.")
+
+    st.write(
+        "Please make sure your files are arranged like this:"
+    )
+
+    st.code(
+        """
+World-GDP-Analysis/
+│
+├── app.py
+├── GDP.csv
+└── requirements.txt
+        """
+    )
+
+    st.write(
+        f"Streamlit is currently looking here:"
+    )
+
+    st.code(str(DATA_FILE))
+
+    st.stop()
+
+
+# =========================================================
 # LOAD DATA
 # =========================================================
 
 @st.cache_data
-def load_data():
+def load_data(file_path):
 
-    df = pd.read_csv("GDP.csv")
+    df = pd.read_csv(file_path)
 
     # Clean column names
-    df.columns = df.columns.str.strip()
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.replace("\n", " ", regex=False)
+    )
 
     # -----------------------------------------------------
     # Clean GDP
@@ -58,7 +105,7 @@ def load_data():
         )
 
     # -----------------------------------------------------
-    # Clean GDP per capita
+    # Clean GDP per Capita
     # -----------------------------------------------------
 
     if "GDP per capita" in df.columns:
@@ -137,22 +184,16 @@ def load_data():
     return df
 
 
-# Load dataset
+# Load the CSV
 try:
-    df = load_data()
 
-except FileNotFoundError:
-
-    st.error(
-        "GDP.csv was not found. Make sure GDP.csv is in the same "
-        "folder as app.py."
-    )
-
-    st.stop()
+    df = load_data(DATA_FILE)
 
 except Exception as e:
 
-    st.error(f"Error loading the dataset: {e}")
+    st.error(
+        f"An error occurred while reading GDP.csv: {e}"
+    )
 
     st.stop()
 
@@ -170,20 +211,26 @@ required_columns = [
     "Share of World GDP"
 ]
 
+
 missing_columns = [
     column
     for column in required_columns
     if column not in df.columns
 ]
 
+
 if missing_columns:
 
     st.error(
-        "The following required columns are missing from GDP.csv:"
+        "Your GDP.csv file is missing the following columns:"
     )
 
     for column in missing_columns:
         st.write(f"- {column}")
+
+    st.write("Columns found in your file:")
+
+    st.write(list(df.columns))
 
     st.stop()
 
@@ -195,9 +242,9 @@ if missing_columns:
 st.sidebar.header("Dashboard Filters")
 
 
-# ---------------------------------------------------------
-# Country Filter
-# ---------------------------------------------------------
+# =========================================================
+# COUNTRY FILTER
+# =========================================================
 
 countries = st.sidebar.multiselect(
     "Select Countries",
@@ -210,21 +257,16 @@ countries = st.sidebar.multiselect(
 )
 
 
-# ---------------------------------------------------------
-# GDP Growth Filter
-# ---------------------------------------------------------
+# =========================================================
+# GDP GROWTH FILTER
+# =========================================================
 
-growth_min = float(
-    df["GDP Growth"]
-    .dropna()
-    .min()
-)
+growth_values = df["GDP Growth"].dropna()
 
-growth_max = float(
-    df["GDP Growth"]
-    .dropna()
-    .max()
-)
+
+growth_min = float(growth_values.min())
+growth_max = float(growth_values.max())
+
 
 growth_range = st.sidebar.slider(
     "GDP Growth Range (%)",
@@ -234,21 +276,16 @@ growth_range = st.sidebar.slider(
 )
 
 
-# ---------------------------------------------------------
-# GDP Per Capita Filter
-# ---------------------------------------------------------
+# =========================================================
+# GDP PER CAPITA FILTER
+# =========================================================
 
-income_min = float(
-    df["GDP per capita"]
-    .dropna()
-    .min()
-)
+income_values = df["GDP per capita"].dropna()
 
-income_max = float(
-    df["GDP per capita"]
-    .dropna()
-    .max()
-)
+
+income_min = float(income_values.min())
+income_max = float(income_values.max())
+
 
 income_range = st.sidebar.slider(
     "GDP per Capita Range ($)",
@@ -265,7 +302,6 @@ income_range = st.sidebar.slider(
 filtered_df = df.copy()
 
 
-# Country filter
 if countries:
 
     filtered_df = filtered_df[
@@ -273,7 +309,6 @@ if countries:
     ]
 
 
-# GDP Growth filter
 filtered_df = filtered_df[
     (filtered_df["GDP Growth"] >= growth_range[0])
     &
@@ -281,7 +316,6 @@ filtered_df = filtered_df[
 ]
 
 
-# GDP per capita filter
 filtered_df = filtered_df[
     (filtered_df["GDP per capita"] >= income_range[0])
     &
@@ -290,21 +324,21 @@ filtered_df = filtered_df[
 
 
 # =========================================================
-# CHECK IF FILTER RETURNED DATA
+# CHECK FILTERED DATA
 # =========================================================
 
 if filtered_df.empty:
 
     st.warning(
         "No countries match the selected filters. "
-        "Please adjust the filters in the sidebar."
+        "Please change the filters."
     )
 
     st.stop()
 
 
 # =========================================================
-# KEY PERFORMANCE INDICATORS
+# KPI SECTION
 # =========================================================
 
 st.subheader("Key Performance Indicators")
@@ -313,10 +347,6 @@ st.subheader("Key Performance Indicators")
 col1, col2, col3, col4 = st.columns(4)
 
 
-# ---------------------------------------------------------
-# Number of Countries
-# ---------------------------------------------------------
-
 with col1:
 
     st.metric(
@@ -324,10 +354,6 @@ with col1:
         f"{len(filtered_df):,}"
     )
 
-
-# ---------------------------------------------------------
-# Total GDP
-# ---------------------------------------------------------
 
 with col2:
 
@@ -341,40 +367,32 @@ with col2:
     )
 
 
-# ---------------------------------------------------------
-# Average GDP Per Capita
-# ---------------------------------------------------------
-
 with col3:
 
-    avg_gdp_per_capita = filtered_df[
+    average_gdp_per_capita = filtered_df[
         "GDP per capita"
     ].mean()
 
     st.metric(
         "Average GDP per Capita",
-        f"${avg_gdp_per_capita:,.0f}"
+        f"${average_gdp_per_capita:,.0f}"
     )
 
 
-# ---------------------------------------------------------
-# Average GDP Growth
-# ---------------------------------------------------------
-
 with col4:
 
-    avg_growth = filtered_df[
+    average_growth = filtered_df[
         "GDP Growth"
     ].mean()
 
     st.metric(
         "Average GDP Growth",
-        f"{avg_growth:.2f}%"
+        f"{average_growth:.2f}%"
     )
 
 
 # =========================================================
-# DATASET PREVIEW
+# DATA PREVIEW
 # =========================================================
 
 st.subheader("Dataset Preview")
@@ -645,8 +663,17 @@ st.plotly_chart(
 st.subheader("GDP vs GDP per Capita")
 
 
+scatter_df = filtered_df.dropna(
+    subset=[
+        "GDP (nominal, 2023)",
+        "GDP per capita",
+        "Population 2023"
+    ]
+)
+
+
 fig_scatter = px.scatter(
-    filtered_df,
+    scatter_df,
     x="GDP (nominal, 2023)",
     y="GDP per capita",
     size="Population 2023",
@@ -682,8 +709,17 @@ st.plotly_chart(
 st.subheader("Population vs GDP")
 
 
+population_df = filtered_df.dropna(
+    subset=[
+        "Population 2023",
+        "GDP (nominal, 2023)",
+        "GDP per capita"
+    ]
+)
+
+
 fig_population = px.scatter(
-    filtered_df,
+    population_df,
     x="Population 2023",
     y="GDP (nominal, 2023)",
     size="GDP per capita",
@@ -720,6 +756,7 @@ st.subheader("Share of World GDP")
 
 world_share = (
     filtered_df
+    .dropna(subset=["Share of World GDP"])
     .sort_values(
         by="Share of World GDP",
         ascending=False
@@ -754,23 +791,19 @@ st.plotly_chart(
 st.subheader("GDP Growth vs GDP per Capita")
 
 
-# Only use trendline when enough valid rows exist
-trend_df = filtered_df[
-    [
+growth_capita_df = filtered_df.dropna(
+    subset=[
         "GDP per capita",
         "GDP Growth",
-        "GDP (nominal, 2023)",
-        "Population 2023",
-        "Share of World GDP",
-        "Country"
+        "GDP (nominal, 2023)"
     ]
-].dropna()
+)
 
 
-if len(trend_df) >= 3:
+if len(growth_capita_df) >= 3:
 
     fig_growth_capita = px.scatter(
-        trend_df,
+        growth_capita_df,
         x="GDP per capita",
         y="GDP Growth",
         size="GDP (nominal, 2023)",
@@ -790,7 +823,7 @@ if len(trend_df) >= 3:
 else:
 
     fig_growth_capita = px.scatter(
-        trend_df,
+        growth_capita_df,
         x="GDP per capita",
         y="GDP Growth",
         hover_name="Country",
