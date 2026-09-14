@@ -2,92 +2,229 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# ---------------------------------------------------------
+
+# =========================================================
 # PAGE CONFIGURATION
-# ---------------------------------------------------------
+# =========================================================
 
 st.set_page_config(
     page_title="World GDP Data Analysis",
-    page_icon="",
     layout="wide"
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # TITLE
-# ---------------------------------------------------------
+# =========================================================
 
 st.title("World GDP Data Analysis Dashboard")
+
 st.write(
     "Interactive analysis of GDP, GDP growth, population, "
-    "GDP per capita and share of world GDP."
+    "GDP per capita, and share of world GDP."
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # LOAD DATA
-# ---------------------------------------------------------
+# =========================================================
 
 @st.cache_data
 def load_data():
+
     df = pd.read_csv("GDP.csv")
 
     # Clean column names
     df.columns = df.columns.str.strip()
 
-    # Remove commas and currency symbols from numeric columns
-    df["GDP (nominal, 2023)"] = (
-        df["GDP (nominal, 2023)"]
-        .astype(str)
-        .str.replace("$", "", regex=False)
-        .str.replace(",", "", regex=False)
-        .astype(float)
-    )
+    # -----------------------------------------------------
+    # Clean GDP
+    # -----------------------------------------------------
 
-    df["GDP per capita"] = (
-        df["GDP per capita"]
-        .astype(str)
-        .str.replace("$", "", regex=False)
-        .str.replace(",", "", regex=False)
-        .astype(float)
-    )
+    if "GDP (nominal, 2023)" in df.columns:
 
-    # Convert percentages to numeric values
-    df["GDP Growth"] = (
-        df["GDP Growth"]
-        .astype(str)
-        .str.replace("%", "", regex=False)
-        .str.replace("−", "-", regex=False)
-        .astype(float)
-    )
+        df["GDP (nominal, 2023)"] = (
+            df["GDP (nominal, 2023)"]
+            .astype(str)
+            .str.replace("$", "", regex=False)
+            .str.replace(",", "", regex=False)
+            .str.replace("−", "-", regex=False)
+            .str.strip()
+        )
 
-    df["Share of World GDP"] = (
-        df["Share of World GDP"]
-        .astype(str)
-        .str.replace("%", "", regex=False)
-        .str.replace("−", "-", regex=False)
-        .astype(float)
-    )
+        df["GDP (nominal, 2023)"] = pd.to_numeric(
+            df["GDP (nominal, 2023)"],
+            errors="coerce"
+        )
+
+    # -----------------------------------------------------
+    # Clean GDP per capita
+    # -----------------------------------------------------
+
+    if "GDP per capita" in df.columns:
+
+        df["GDP per capita"] = (
+            df["GDP per capita"]
+            .astype(str)
+            .str.replace("$", "", regex=False)
+            .str.replace(",", "", regex=False)
+            .str.replace("−", "-", regex=False)
+            .str.strip()
+        )
+
+        df["GDP per capita"] = pd.to_numeric(
+            df["GDP per capita"],
+            errors="coerce"
+        )
+
+    # -----------------------------------------------------
+    # Clean GDP Growth
+    # -----------------------------------------------------
+
+    if "GDP Growth" in df.columns:
+
+        df["GDP Growth"] = (
+            df["GDP Growth"]
+            .astype(str)
+            .str.replace("%", "", regex=False)
+            .str.replace("−", "-", regex=False)
+            .str.strip()
+        )
+
+        df["GDP Growth"] = pd.to_numeric(
+            df["GDP Growth"],
+            errors="coerce"
+        )
+
+    # -----------------------------------------------------
+    # Clean Share of World GDP
+    # -----------------------------------------------------
+
+    if "Share of World GDP" in df.columns:
+
+        df["Share of World GDP"] = (
+            df["Share of World GDP"]
+            .astype(str)
+            .str.replace("%", "", regex=False)
+            .str.replace("−", "-", regex=False)
+            .str.strip()
+        )
+
+        df["Share of World GDP"] = pd.to_numeric(
+            df["Share of World GDP"],
+            errors="coerce"
+        )
+
+    # -----------------------------------------------------
+    # Clean Population
+    # -----------------------------------------------------
+
+    if "Population 2023" in df.columns:
+
+        df["Population 2023"] = (
+            df["Population 2023"]
+            .astype(str)
+            .str.replace(",", "", regex=False)
+            .str.replace("−", "-", regex=False)
+            .str.strip()
+        )
+
+        df["Population 2023"] = pd.to_numeric(
+            df["Population 2023"],
+            errors="coerce"
+        )
 
     return df
 
 
-df = load_data()
+# Load dataset
+try:
+    df = load_data()
 
-# ---------------------------------------------------------
+except FileNotFoundError:
+
+    st.error(
+        "GDP.csv was not found. Make sure GDP.csv is in the same "
+        "folder as app.py."
+    )
+
+    st.stop()
+
+except Exception as e:
+
+    st.error(f"Error loading the dataset: {e}")
+
+    st.stop()
+
+
+# =========================================================
+# CHECK REQUIRED COLUMNS
+# =========================================================
+
+required_columns = [
+    "Country",
+    "GDP (nominal, 2023)",
+    "GDP Growth",
+    "Population 2023",
+    "GDP per capita",
+    "Share of World GDP"
+]
+
+missing_columns = [
+    column
+    for column in required_columns
+    if column not in df.columns
+]
+
+if missing_columns:
+
+    st.error(
+        "The following required columns are missing from GDP.csv:"
+    )
+
+    for column in missing_columns:
+        st.write(f"- {column}")
+
+    st.stop()
+
+
+# =========================================================
 # SIDEBAR
-# ---------------------------------------------------------
+# =========================================================
 
 st.sidebar.header("Dashboard Filters")
 
-# Country filter
+
+# ---------------------------------------------------------
+# Country Filter
+# ---------------------------------------------------------
+
 countries = st.sidebar.multiselect(
     "Select Countries",
-    options=sorted(df["Country"].unique()),
+    options=sorted(
+        df["Country"]
+        .dropna()
+        .unique()
+    ),
     default=[]
 )
 
-# GDP growth range
-growth_min = float(df["GDP Growth"].min())
-growth_max = float(df["GDP Growth"].max())
+
+# ---------------------------------------------------------
+# GDP Growth Filter
+# ---------------------------------------------------------
+
+growth_min = float(
+    df["GDP Growth"]
+    .dropna()
+    .min()
+)
+
+growth_max = float(
+    df["GDP Growth"]
+    .dropna()
+    .max()
+)
 
 growth_range = st.sidebar.slider(
     "GDP Growth Range (%)",
@@ -96,9 +233,22 @@ growth_range = st.sidebar.slider(
     value=(growth_min, growth_max)
 )
 
-# GDP per capita range
-income_min = float(df["GDP per capita"].min())
-income_max = float(df["GDP per capita"].max())
+
+# ---------------------------------------------------------
+# GDP Per Capita Filter
+# ---------------------------------------------------------
+
+income_min = float(
+    df["GDP per capita"]
+    .dropna()
+    .min()
+)
+
+income_max = float(
+    df["GDP per capita"]
+    .dropna()
+    .max()
+)
 
 income_range = st.sidebar.slider(
     "GDP per Capita Range ($)",
@@ -107,68 +257,125 @@ income_range = st.sidebar.slider(
     value=(income_min, income_max)
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # APPLY FILTERS
-# ---------------------------------------------------------
+# =========================================================
 
 filtered_df = df.copy()
 
+
+# Country filter
 if countries:
+
     filtered_df = filtered_df[
         filtered_df["Country"].isin(countries)
     ]
 
+
+# GDP Growth filter
 filtered_df = filtered_df[
     (filtered_df["GDP Growth"] >= growth_range[0])
-    & (filtered_df["GDP Growth"] <= growth_range[1])
+    &
+    (filtered_df["GDP Growth"] <= growth_range[1])
 ]
 
+
+# GDP per capita filter
 filtered_df = filtered_df[
     (filtered_df["GDP per capita"] >= income_range[0])
-    & (filtered_df["GDP per capita"] <= income_range[1])
+    &
+    (filtered_df["GDP per capita"] <= income_range[1])
 ]
 
-# ---------------------------------------------------------
-# KPI SECTION
-# ---------------------------------------------------------
+
+# =========================================================
+# CHECK IF FILTER RETURNED DATA
+# =========================================================
+
+if filtered_df.empty:
+
+    st.warning(
+        "No countries match the selected filters. "
+        "Please adjust the filters in the sidebar."
+    )
+
+    st.stop()
+
+
+# =========================================================
+# KEY PERFORMANCE INDICATORS
+# =========================================================
 
 st.subheader("Key Performance Indicators")
 
+
 col1, col2, col3, col4 = st.columns(4)
 
+
+# ---------------------------------------------------------
+# Number of Countries
+# ---------------------------------------------------------
+
 with col1:
+
     st.metric(
         "Countries",
-        len(filtered_df)
+        f"{len(filtered_df):,}"
     )
 
+
+# ---------------------------------------------------------
+# Total GDP
+# ---------------------------------------------------------
+
 with col2:
-    total_gdp = filtered_df["GDP (nominal, 2023)"].sum()
+
+    total_gdp = filtered_df[
+        "GDP (nominal, 2023)"
+    ].sum()
 
     st.metric(
         "Total GDP",
         f"${total_gdp / 1e12:.2f}T"
     )
 
+
+# ---------------------------------------------------------
+# Average GDP Per Capita
+# ---------------------------------------------------------
+
 with col3:
-    avg_gdp_per_capita = filtered_df["GDP per capita"].mean()
+
+    avg_gdp_per_capita = filtered_df[
+        "GDP per capita"
+    ].mean()
 
     st.metric(
         "Average GDP per Capita",
         f"${avg_gdp_per_capita:,.0f}"
     )
 
+
+# ---------------------------------------------------------
+# Average GDP Growth
+# ---------------------------------------------------------
+
 with col4:
-    avg_growth = filtered_df["GDP Growth"].mean()
+
+    avg_growth = filtered_df[
+        "GDP Growth"
+    ].mean()
 
     st.metric(
         "Average GDP Growth",
         f"{avg_growth:.2f}%"
     )
 
-# ---------------------------------------------------------
-# DATA PREVIEW
-# ---------------------------------------------------------
+
+# =========================================================
+# DATASET PREVIEW
+# =========================================================
 
 st.subheader("Dataset Preview")
 
@@ -177,36 +384,60 @@ st.dataframe(
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # DATASET INFORMATION
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("Dataset Information")
 
+
 info_col1, info_col2, info_col3 = st.columns(3)
 
+
 with info_col1:
+
     st.write("Number of Rows")
-    st.write(filtered_df.shape[0])
+
+    st.write(
+        f"{filtered_df.shape[0]:,}"
+    )
+
 
 with info_col2:
+
     st.write("Number of Columns")
-    st.write(filtered_df.shape[1])
+
+    st.write(
+        filtered_df.shape[1]
+    )
+
 
 with info_col3:
-    st.write("Missing Values")
-    st.write(filtered_df.isnull().sum().sum())
 
-# ---------------------------------------------------------
+    st.write("Missing Values")
+
+    st.write(
+        f"{filtered_df.isnull().sum().sum():,}"
+    )
+
+
+# =========================================================
 # TOP COUNTRIES BY GDP
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("Top Countries by GDP")
 
-top_gdp = filtered_df.sort_values(
-    by="GDP (nominal, 2023)",
-    ascending=False
-).head(15)
+
+top_gdp = (
+    filtered_df
+    .sort_values(
+        by="GDP (nominal, 2023)",
+        ascending=False
+    )
+    .head(15)
+)
+
 
 fig_gdp = px.bar(
     top_gdp,
@@ -219,26 +450,35 @@ fig_gdp = px.bar(
     text_auto=".2s"
 )
 
+
 fig_gdp.update_layout(
     template="plotly_white",
     xaxis_tickangle=-45
 )
+
 
 st.plotly_chart(
     fig_gdp,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # TOP COUNTRIES BY GDP PER CAPITA
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("GDP per Capita Analysis")
 
-top_per_capita = filtered_df.sort_values(
-    by="GDP per capita",
-    ascending=False
-).head(15)
+
+top_per_capita = (
+    filtered_df
+    .sort_values(
+        by="GDP per capita",
+        ascending=False
+    )
+    .head(15)
+)
+
 
 fig_per_capita = px.bar(
     top_per_capita,
@@ -251,26 +491,35 @@ fig_per_capita = px.bar(
     text_auto=".2s"
 )
 
+
 fig_per_capita.update_layout(
     template="plotly_white",
     xaxis_tickangle=-45
 )
+
 
 st.plotly_chart(
     fig_per_capita,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # GDP GROWTH
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("GDP Growth Analysis")
 
-growth_df = filtered_df.sort_values(
-    by="GDP Growth",
-    ascending=False
-).head(15)
+
+growth_df = (
+    filtered_df
+    .sort_values(
+        by="GDP Growth",
+        ascending=False
+    )
+    .head(15)
+)
+
 
 fig_growth = px.bar(
     growth_df,
@@ -283,21 +532,31 @@ fig_growth = px.bar(
     text="GDP Growth"
 )
 
+
+fig_growth.update_traces(
+    texttemplate="%{text:.2f}%",
+    textposition="outside"
+)
+
+
 fig_growth.update_layout(
     template="plotly_white",
     xaxis_tickangle=-45
 )
+
 
 st.plotly_chart(
     fig_growth,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # GDP DISTRIBUTION
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("GDP Distribution")
+
 
 fig_hist = px.histogram(
     filtered_df,
@@ -309,20 +568,24 @@ fig_hist = px.histogram(
     }
 )
 
+
 fig_hist.update_layout(
     template="plotly_white"
 )
+
 
 st.plotly_chart(
     fig_hist,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # GDP PER CAPITA DISTRIBUTION
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("GDP per Capita Distribution")
+
 
 fig_hist_capita = px.histogram(
     filtered_df,
@@ -334,20 +597,24 @@ fig_hist_capita = px.histogram(
     }
 )
 
+
 fig_hist_capita.update_layout(
     template="plotly_white"
 )
+
 
 st.plotly_chart(
     fig_hist_capita,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # GDP GROWTH DISTRIBUTION
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("GDP Growth Distribution")
+
 
 fig_growth_hist = px.histogram(
     filtered_df,
@@ -359,20 +626,24 @@ fig_growth_hist = px.histogram(
     }
 )
 
+
 fig_growth_hist.update_layout(
     template="plotly_white"
 )
+
 
 st.plotly_chart(
     fig_growth_hist,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # GDP VS GDP PER CAPITA
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("GDP vs GDP per Capita")
+
 
 fig_scatter = px.scatter(
     filtered_df,
@@ -392,20 +663,24 @@ fig_scatter = px.scatter(
     }
 )
 
+
 fig_scatter.update_layout(
     template="plotly_white"
 )
+
 
 st.plotly_chart(
     fig_scatter,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # POPULATION VS GDP
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("Population vs GDP")
+
 
 fig_population = px.scatter(
     filtered_df,
@@ -424,25 +699,34 @@ fig_population = px.scatter(
     }
 )
 
+
 fig_population.update_layout(
     template="plotly_white"
 )
+
 
 st.plotly_chart(
     fig_population,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
-# WORLD GDP SHARE
-# ---------------------------------------------------------
+
+# =========================================================
+# SHARE OF WORLD GDP
+# =========================================================
 
 st.subheader("Share of World GDP")
 
-world_share = filtered_df.sort_values(
-    by="Share of World GDP",
-    ascending=False
-).head(10)
+
+world_share = (
+    filtered_df
+    .sort_values(
+        by="Share of World GDP",
+        ascending=False
+    )
+    .head(10)
+)
+
 
 fig_world_share = px.pie(
     world_share,
@@ -451,53 +735,86 @@ fig_world_share = px.pie(
     title="Top 10 Countries by Share of World GDP"
 )
 
+
 fig_world_share.update_layout(
     template="plotly_white"
 )
+
 
 st.plotly_chart(
     fig_world_share,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # GDP GROWTH VS GDP PER CAPITA
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("GDP Growth vs GDP per Capita")
 
-fig_growth_capita = px.scatter(
-    filtered_df,
-    x="GDP per capita",
-    y="GDP Growth",
-    size="GDP (nominal, 2023)",
-    hover_name="Country",
-    hover_data=[
+
+# Only use trendline when enough valid rows exist
+trend_df = filtered_df[
+    [
+        "GDP per capita",
+        "GDP Growth",
+        "GDP (nominal, 2023)",
         "Population 2023",
-        "Share of World GDP"
-    ],
-    title="GDP Growth vs GDP per Capita",
-    labels={
-        "GDP per capita": "GDP per Capita ($)",
-        "GDP Growth": "GDP Growth (%)"
-    },
-    trendline="ols"
-)
+        "Share of World GDP",
+        "Country"
+    ]
+].dropna()
+
+
+if len(trend_df) >= 3:
+
+    fig_growth_capita = px.scatter(
+        trend_df,
+        x="GDP per capita",
+        y="GDP Growth",
+        size="GDP (nominal, 2023)",
+        hover_name="Country",
+        hover_data=[
+            "Population 2023",
+            "Share of World GDP"
+        ],
+        title="GDP Growth vs GDP per Capita",
+        labels={
+            "GDP per capita": "GDP per Capita ($)",
+            "GDP Growth": "GDP Growth (%)"
+        },
+        trendline="ols"
+    )
+
+else:
+
+    fig_growth_capita = px.scatter(
+        trend_df,
+        x="GDP per capita",
+        y="GDP Growth",
+        hover_name="Country",
+        title="GDP Growth vs GDP per Capita"
+    )
+
 
 fig_growth_capita.update_layout(
     template="plotly_white"
 )
+
 
 st.plotly_chart(
     fig_growth_capita,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # CORRELATION ANALYSIS
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("Correlation Analysis")
+
 
 numeric_columns = [
     "GDP (nominal, 2023)",
@@ -507,7 +824,11 @@ numeric_columns = [
     "Share of World GDP"
 ]
 
-correlation = filtered_df[numeric_columns].corr()
+
+correlation = filtered_df[
+    numeric_columns
+].corr()
+
 
 fig_corr = px.imshow(
     correlation,
@@ -516,36 +837,45 @@ fig_corr = px.imshow(
     aspect="auto"
 )
 
+
 fig_corr.update_layout(
     template="plotly_white"
 )
+
 
 st.plotly_chart(
     fig_corr,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # DESCRIPTIVE STATISTICS
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("Descriptive Statistics")
 
+
 st.dataframe(
-    filtered_df[numeric_columns].describe(),
+    filtered_df[
+        numeric_columns
+    ].describe(),
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # SORTING TABLE
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("Sort Countries")
 
+
 sort_column = st.selectbox(
     "Select column to sort by",
-    options=df.columns
+    options=filtered_df.columns
 )
+
 
 sort_order = st.radio(
     "Sort Order",
@@ -553,25 +883,30 @@ sort_order = st.radio(
     horizontal=True
 )
 
+
 sorted_df = filtered_df.sort_values(
     by=sort_column,
     ascending=(sort_order == "Ascending")
 )
+
 
 st.dataframe(
     sorted_df,
     use_container_width=True
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # COUNTRY SEARCH
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("Search for a Country")
+
 
 search_country = st.text_input(
     "Enter country name"
 )
+
 
 if search_country:
 
@@ -583,32 +918,43 @@ if search_country:
         )
     ]
 
-    if len(search_result) > 0:
+    if not search_result.empty:
+
         st.dataframe(
             search_result,
             use_container_width=True
         )
-    else:
-        st.warning("No country found.")
 
-# ---------------------------------------------------------
+    else:
+
+        st.warning(
+            "No country found."
+        )
+
+
+# =========================================================
 # DOWNLOAD DATA
-# ---------------------------------------------------------
+# =========================================================
 
 st.subheader("Download Data")
 
-csv = filtered_df.to_csv(index=False).encode("utf-8")
+
+csv_data = filtered_df.to_csv(
+    index=False
+).encode("utf-8")
+
 
 st.download_button(
     label="Download Filtered Dataset",
-    data=csv,
+    data=csv_data,
     file_name="filtered_gdp_dataset.csv",
     mime="text/csv"
 )
 
-# ---------------------------------------------------------
+
+# =========================================================
 # FOOTER
-# ---------------------------------------------------------
+# =========================================================
 
 st.divider()
 
